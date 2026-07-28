@@ -13,8 +13,18 @@ internal static class Program
     {
         string baseDir = AppContext.BaseDirectory;
         string settingsPath = Path.Combine(baseDir, "settings.json");
-        var settings = SettingsStore.Load(settingsPath);
-        Log.Init(Path.Combine(baseDir, "monitor.log"), settings.Logging.Enabled, settings.Logging.MaxSizeKb);
+
+        // Log first, with defaults for its own settings: Load's warning is the only account of a
+        // corrupt settings.json, and initialising the log afterwards discarded it — the strip
+        // silently reverted to stock with nothing on disk explaining why. Re-init below once the
+        // real logging settings are known; a corrupt file leaves the defaults in place, which is
+        // what we want for reporting the corruption.
+        string logPath = Path.Combine(baseDir, "monitor.log");
+        var logDefaults = new LoggingSettings();
+        Log.Init(logPath, logDefaults.Enabled, logDefaults.MaxSizeKb);
+        var settings = SettingsStore.Load(settingsPath, Log.Warn);
+        Log.Init(logPath, settings.Logging.Enabled, settings.Logging.MaxSizeKb);
+
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             Log.Error("Unhandled exception", e.ExceptionObject as Exception);
 

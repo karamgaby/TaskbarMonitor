@@ -13,13 +13,19 @@ internal static partial class NativeMethods
 
     // Messages
     public const int WM_SETTINGCHANGE = 0x001A;
+    public const int WM_SETCURSOR = 0x0020;
     public const int WM_MOUSEACTIVATE = 0x0021;
     public const int WM_DISPLAYCHANGE = 0x007E;
     public const int WM_LBUTTONDOWN = 0x0201;
+    public const int WM_LBUTTONUP = 0x0202;
+    public const int WM_RBUTTONDOWN = 0x0204;
     public const int WM_RBUTTONUP = 0x0205;
     public const int WM_DPICHANGED = 0x02E0;
     public const int WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320;
     public const int MA_NOACTIVATE = 3;
+
+    // Cursors (LoadCursorW with a NULL hInstance takes these MAKEINTRESOURCE ids)
+    public static readonly IntPtr IDC_HAND = new(32649);
 
     // UpdateLayeredWindow
     public const uint ULW_ALPHA = 0x00000002;
@@ -87,6 +93,12 @@ internal static partial class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern int GetWindowLongW(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr LoadCursorW(IntPtr hInstance, IntPtr lpCursorName);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetCursor(IntPtr hCursor);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -71,12 +71,16 @@ Useful parameters:
 The strip should appear on each taskbar, just left of the tray:
 
 ```
-↓ 1.2 MB/s ↑ 88 KB/s │ CPU 14% 46°C │ RAM 38% │ GPU 12% 51°C
+↓   1.2 MB/s  ↑  88.0 KB/s │ CPU  14%  46°C
 ```
 
+Network and CPU are shown by default; RAM and GPU are off, and one checkbox away in Settings. Every
+field is fixed-width so the numbers never make the strip jitter, which is where the padding comes
+from.
+
 It has no background of its own — the text is drawn straight onto the taskbar's acrylic, in your
-Windows accent color. **Right-click the strip** for the menu (settings, open settings file, reload
-settings, exit). If the menu does not open, see [Troubleshooting](#troubleshooting).
+Windows accent color. **Right-click the strip** for the menu (settings, advanced, exit). If the
+menu does not open, see [Troubleshooting](#troubleshooting).
 
 To check from a shell:
 
@@ -121,21 +125,26 @@ debounce).
 
 ### The settings window
 
-Right-click the strip → **Settings…**. Every field is a normal control, and **every change previews
-live on the strip immediately** — nothing is written to `settings.json` until you press **Save**.
-**Cancel**, `Esc` and the X button all revert the strip to how it looked when the window opened.
-*Reset to defaults* restores the groups the window shows, but does not save on its own.
+Click the strip → **Settings…**. Every field is a normal control, and **every change previews live
+on the strip immediately** — nothing is written to `settings.json` until you press **Save**.
+**Save** writes the file and leaves the window open, so you can keep tuning. **Close**, `Esc` and
+the X button all revert the strip to how it looked when the window opened; if you have unsaved
+changes they ask first. The title carries a `*` while anything is unsaved. *Reset to defaults*
+restores the groups the window shows, but does not save on its own.
 
 A few things worth knowing:
 
 - **`pollIntervalMs`, `sensorIntervalMs` and the whole `logging` section are file-only** — the
-  window does not show them, and *Reset to defaults* leaves them untouched. Use *Open settings file*
-  for those. (`logging` in particular only takes effect at startup.)
+  window does not show them, and *Reset to defaults* leaves them untouched. Use
+  *Advanced → Open settings file* for those. (`logging` in particular only takes effect at startup.)
 - **External edits are ignored while the window is open**, since its draft is already live on the
-  strip. Close it, or use *Reload settings*, to pick them up. If the file changed behind its back,
-  Save asks before overwriting.
+  strip. Close it, or use *Advanced → Reload settings*, to pick them up. If the file changed behind
+  its back, Save asks before overwriting.
 - **Saving normalizes.** Values outside the window's ranges are clamped, and an unrecognised `theme`
   or `textColorSource` becomes `auto` / `accent` — which is already how the renderer treated them.
+- **Positioning is not five equal knobs.** *Gap from tray* positions the primary strip;
+  *Secondary bar reserve* positions the ones on other monitors. *Tray reserve* is a fallback used
+  only if the tray cannot be located at all, and the window disables it when it does not apply.
 
 `settings.json` stays authoritative, and hand-editing still works exactly as before.
 
@@ -149,14 +158,17 @@ These are the ones most people want; all of them are in the window's *Appearance
 | `fontSizePt` | `12` | Scaled by the monitor's DPI |
 | `theme` | `auto` | `auto` follows Windows, or force `light` / `dark` |
 | `textColorSource` | `accent` | `accent` follows your Windows accent color; `theme` uses a plain neutral |
-| `backgroundAlpha` | `0` | `0` is fully transparent. Raise it (e.g. `40`) for a translucent pill behind the text |
+| `backgroundAlpha` | `0` | `0` is fully transparent. Raise it (e.g. `40`) for a translucent pill behind the text. Always the opacity, including when `backgroundOverride` is set |
 | `textShadow` | `true` | 1 px shadow; helps legibility over bright wallpapers |
-| `backgroundOverride` | `null` | `#RRGGBB` or `#AARRGGBB` — wins over `backgroundAlpha` |
+| `backgroundOverride` | `null` | `#RRGGBB` — the background *color* only; opacity stays with `backgroundAlpha` |
 | `textOverride` | `null` | `#RRGGBB` — wins over the accent color |
 
-Other sections cover which metrics are shown (`metrics`), placement relative to the tray
-(`positioning`), fullscreen/auto-hide behaviour (`behavior`), the network adapter
-(`network`) and logging (`logging`).
+An `#AARRGGBB` value in `backgroundOverride` still parses, but its alpha byte is ignored —
+`backgroundAlpha` is the single source of opacity, so the slider always does something.
+
+Other sections cover which metrics are shown (`metrics` — `network` and `cpu` are on by default,
+`ram` and `gpu` off), placement relative to the tray (`positioning`), fullscreen/auto-hide
+behaviour (`behavior`), the network adapter (`network`) and logging (`logging`).
 
 A corrupt `settings.json` is not overwritten — the app logs a warning and runs on defaults, so your
 file is safe to hand-edit.
@@ -173,19 +185,25 @@ Start-ScheduledTask -TaskName TaskbarMonitor
 ```
 
 **CPU temperature shows `--°C`.** Either PawnIO is not installed, or the app is running
-unelevated. Check `monitor.log` — the startup line reports both:
-`Elevated=True, PawnIO=installed`. Launching `TaskbarMonitor.exe` by double-clicking runs it
-unelevated; start it through the scheduled task instead.
+unelevated. The strip's menu names whichever applies, as a greyed line above *Exit*. `monitor.log`
+reports both on the startup line: `Elevated=True, PawnIO=installed`. Launching
+`TaskbarMonitor.exe` by double-clicking runs it unelevated; start it through the scheduled task
+instead.
 
 **Right-clicking the strip does nothing.** The strip is a transparent layered window, and layered
-windows are click-through wherever the alpha is exactly zero. It is washed at alpha 1 to stay
-hit-testable, so this should not happen — if it does, set `backgroundAlpha` to a visible value to
+windows are click-through wherever the alpha is exactly zero — it is washed at alpha 1 to stay
+hit-testable, so this should not happen. If it does, set `backgroundAlpha` to a visible value to
 confirm where the strip actually is, and file it as a bug.
 
 **I hand-edited `settings.json` and nothing happened.** The settings window was open — external
 changes are deliberately ignored while it is, so it cannot be clobbered mid-edit. `monitor.log`
 records this as `settings.json changed on disk; ignored while the settings window is open`. Close
-the window and save again, or use *Reload settings*.
+the window and save again, or use *Advanced → Reload settings*.
+
+**My settings reverted to defaults on their own.** `settings.json` failed to parse, so the app fell
+back to defaults and left your file untouched. `monitor.log` records the reason on the line starting
+`Failed to load settings`. Fix the JSON — usually a trailing comma or an unclosed brace — and the
+file reloads on save.
 
 **The strip vanished after restarting explorer.** It should redock automatically within ~2 s.
 If it does not, check `monitor.log` for `TaskbarCreated received`; if that line is missing, the

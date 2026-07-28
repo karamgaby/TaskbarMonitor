@@ -51,19 +51,56 @@ public sealed class OverlayWindow : Form
         // No double buffer: nothing is ever shown from the WM_PAINT back buffer
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
 
+        // Stock chrome on purpose. A custom ToolStripRenderer + ShowImageMargin=false was tried here
+        // to make the menu follow dark mode (see StripMenuRenderer), and the menu stopped responding
+        // to mouse clicks on its items while keyboard navigation kept working — i.e. mouse input was
+        // not reaching the drop-down at all. Not diagnosed yet, and this menu is the app's only UI,
+        // so looking right is not worth it being unusable. Do not re-wire without verifying clicks.
         _menu = new ContextMenuStrip();
-        _menu.Items.Add("Settings…", null, (_, _) => SettingsWindowRequested?.Invoke());
+        _menu.Items.Add("&Settings…", null, (_, _) => SettingsWindowRequested?.Invoke());
+
+        // The file items still matter — the window deliberately does not expose pollIntervalMs,
+        // sensorIntervalMs or logging, and the docs point here for those — but a real settings UI
+        // outranks them, so they move one level down instead of competing at the top.
+        var advanced = new ToolStripMenuItem("&Advanced");
+        advanced.DropDownItems.Add("&Open settings file", null, (_, _) => OpenSettingsRequested?.Invoke());
+        advanced.DropDownItems.Add("&Reload settings", null, (_, _) => ReloadRequested?.Invoke());
+        advanced.DropDownItems.Add(new ToolStripSeparator());
+        advanced.DropDownItems.Add(new ToolStripMenuItem(
+            $"TaskbarMonitor {typeof(OverlayWindow).Assembly.GetName().Version}") { Enabled = false });
+        _menu.Items.Add(advanced);
+
+        // Shown whenever the CPU package temp cannot be read, naming the actual cause: elevation and
+        // the PawnIO driver are independent, and "needs admin" is simply wrong on an elevated machine
+        // with no driver. ElevationInfo already computes both; only the log ever saw the difference.
+        string? tempHint = CpuTempUnavailableHint();
+        if (tempHint is not null)
+        {
+            _menu.Items.Add(new ToolStripSeparator());
+            _menu.Items.Add(new ToolStripMenuItem(tempHint) { Enabled = false });
+        }
+
         _menu.Items.Add(new ToolStripSeparator());
-        // Kept, and kept worded the same: the window deliberately does not expose pollIntervalMs,
-        // sensorIntervalMs or logging, and the docs point at this item for those.
-        _menu.Items.Add("Open settings file", null, (_, _) => OpenSettingsRequested?.Invoke());
-        _menu.Items.Add("Reload settings", null, (_, _) => ReloadRequested?.Invoke());
-        _menu.Items.Add(new ToolStripSeparator());
-        if (!ElevationInfo.IsElevated)
-            _menu.Items.Add(new ToolStripMenuItem("CPU temp needs admin (run via installed task)") { Enabled = false });
-        _menu.Items.Add("Exit", null, (_, _) => ExitRequested?.Invoke());
+        _menu.Items.Add("E&xit", null, (_, _) => ExitRequested?.Invoke());
 
         ApplyAppearance(settings);
+    }
+
+    /// <summary>
+    /// Null when the CPU package temperature should be readable. Elevation and the PawnIO driver are
+    /// separate prerequisites and either can be the one that is missing.
+    /// </summary>
+    private static string? CpuTempUnavailableHint()
+    {
+        bool elevated = ElevationInfo.IsElevated;
+        bool driver = ElevationInfo.PawnIoState() == "installed";
+        return (elevated, driver) switch
+        {
+            (true, true) => null,
+            (false, true) => "CPU temp needs admin — run via the installed task",
+            (true, false) => "CPU temp needs the PawnIO driver — pawnio.eu",
+            (false, false) => "CPU temp needs admin and the PawnIO driver — pawnio.eu",
+        };
     }
 
     protected override CreateParams CreateParams
@@ -200,16 +237,27 @@ public sealed class OverlayWindow : Form
         }
         else if (m.Msg == NativeMethods.WM_RBUTTONUP)
         {
-            // Non-activating windows can't dismiss menus on outside clicks without this
-            NativeMethods.SetForegroundWindow(Handle);
-            _menu.Show(Cursor.Position);
+            // Reverted to right-click-only. Opening the menu from WM_LBUTTONUP as well (for
+            // discoverability — the strip has no other affordance) left the menu unresponsive to
+            // mouse clicks on its items while keyboard navigation still worked. A WM_SETCURSOR
+            // handler returning IDC_HAND went in at the same time. Neither is obviously capable of
+            // that, so the cause is not yet known; this is the configuration known to work.
+            // See MenuDiagnostics below before trying again.
+            ShowMenu();
             return;
         }
         else if (m.Msg == NativeMethods.WM_LBUTTONDOWN)
         {
-            return; // swallow
+            return; // swallow: never take focus from the taskbar
         }
         base.WndProc(ref m);
+    }
+
+    private void ShowMenu()
+    {
+        // Non-activating windows can't dismiss menus on outside clicks without this
+        NativeMethods.SetForegroundWindow(Handle);
+        _menu.Show(Cursor.Position);
     }
 
     private static bool IsImmersiveColorSet(IntPtr lParam)

@@ -14,8 +14,19 @@ public readonly record struct StripPalette(Color Background, Color Text, Color S
 /// </summary>
 public static class ThemeWatcher
 {
-    /// <summary>Relative-luminance the text must clear (dark theme) or stay under (light theme).</summary>
-    private const double LuminanceThreshold = 0.35;
+    /// <summary>
+    /// Relative-luminance the text must clear on a dark taskbar. Win11's dark bar is around #202020
+    /// (L ≈ 0.014), so 0.35 lands near 5.6:1 — comfortably past WCAG AA.
+    /// </summary>
+    private const double DarkLuminanceFloor = 0.35;
+
+    /// <summary>
+    /// Ceiling on a light taskbar. The two themes are not symmetric: Win11's light bar is around
+    /// #F3F3F3 (L ≈ 0.876), where L = 0.35 is only ≈2.3:1 — well under AA. Clearing 4.5:1 against
+    /// that background needs L ≤ ≈0.156, so the ceiling is much lower than the dark floor.
+    /// Ramp index 5 already lands most accents in range; this backstops bright ones (yellow, lime).
+    /// </summary>
+    private const double LightLuminanceCeiling = 0.15;
 
     public static StripPalette Resolve(AppearanceSettings appearance)
     {
@@ -33,10 +44,16 @@ public static class ThemeWatcher
             && TryGetAccentColor(light, out var accent))
             text = EnsureReadable(accent, darkTheme: !light);
 
-        var bg = Color.FromArgb(Math.Clamp(appearance.BackgroundAlpha, 0, 255),
-            light ? Color.FromArgb(0xEE, 0xEE, 0xEE) : Color.FromArgb(0x20, 0x20, 0x20));
+        int alpha = Math.Clamp(appearance.BackgroundAlpha, 0, 255);
+        var bgRgb = light ? Color.FromArgb(0xEE, 0xEE, 0xEE) : Color.FromArgb(0x20, 0x20, 0x20);
 
-        if (TryParseHex(appearance.BackgroundOverride, out var bgOverride)) bg = bgOverride;
+        // The override supplies RGB only; alpha always comes from backgroundAlpha. Taking alpha from
+        // the override too made the slider a silent no-op whenever one was set, which then needed a
+        // disabled state and a hint to explain, and forced #AARRGGBB to exist so alpha could be typed
+        // (ColorDialog cannot pick it). One rule instead: colour here, opacity there.
+        if (TryParseHex(appearance.BackgroundOverride, out var bgOverride)) bgRgb = bgOverride;
+        var bg = Color.FromArgb(alpha, bgRgb);
+
         if (TryParseHex(appearance.TextOverride, out var textOverride)) text = textOverride;
 
         // Shadow opposes the text so it reads on either theme
@@ -107,10 +124,10 @@ public static class ThemeWatcher
     public static Color EnsureReadable(Color c, bool darkTheme)
     {
         var target = darkTheme ? Color.White : Color.Black;
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < 24; i++)
         {
             double l = RelativeLuminance(c);
-            if (darkTheme ? l >= LuminanceThreshold : l <= LuminanceThreshold) return c;
+            if (darkTheme ? l >= DarkLuminanceFloor : l <= LightLuminanceCeiling) return c;
             c = Lerp(c, target, 0.12);
         }
         return c;
