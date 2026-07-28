@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishTrimmed>false</PublishTrimmed>
+    <Version>1.0.0</Version>
+    <AssemblyTitle>TaskbarMonitor</AssemblyTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned exactly: sensor behavior (Blackwell/RaptorLake support, PawnIO backend) is version-sensitive -->
+    <PackageReference Include="LibreHardwareMonitorLib" Version="[0.9.6]" />
+  </ItemGroup>
+
+</Project>
