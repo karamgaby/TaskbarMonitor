@@ -42,8 +42,11 @@ public sealed class AppearanceSettings
     public string FontName { get; set; } = "Consolas";
     public float FontSizePt { get; set; } = 12.0f;
     public string Theme { get; set; } = "auto";           // auto | dark | light
-    public string? BackgroundOverride { get; set; }       // "#RRGGBB"
-    public string? TextOverride { get; set; }
+    public string TextColorSource { get; set; } = "accent"; // accent | theme
+    public int BackgroundAlpha { get; set; } = 0;         // 0-255; 0 = fully transparent
+    public bool TextShadow { get; set; } = true;          // 1px shadow keeps text legible over the taskbar
+    public string? BackgroundOverride { get; set; }       // "#RRGGBB" or "#AARRGGBB"
+    public string? TextOverride { get; set; }             // wins over the accent color
 }
 
 public sealed class BehaviorSettings

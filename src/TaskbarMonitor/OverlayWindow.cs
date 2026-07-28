@@ -9,6 +9,14 @@ namespace TaskbarMonitor;
 /// One borderless strip per taskbar. WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST:
 /// never takes focus, no Alt+Tab entry, no taskbar button. Right-click opens the menu;
 /// left-clicks are swallowed.
+///
+/// The strip is a per-pixel-alpha layered window: it has no panel of its own, so the taskbar's
+/// acrylic shows through and the text looks painted directly onto it. All painting goes through
+/// <see cref="LayeredSurface"/> / UpdateLayeredWindow — WM_PAINT is unused.
+///
+/// Never set Opacity, TransparencyKey or AllowTransparency on this form: WinForms would then drive
+/// the layer via SetLayeredWindowAttributes, which cannot be mixed with UpdateLayeredWindow, and
+/// the strip would go blank.
 /// </summary>
 public sealed class OverlayWindow : Form
 {
@@ -16,14 +24,19 @@ public sealed class OverlayWindow : Form
 
     public event Action? ExplorerRestarted;
     public event Action? DisplayOrSettingsChanged;
+    public event Action? AppearanceInvalidated;
     public event Action? ExitRequested;
     public event Action? ReloadRequested;
     public event Action? OpenSettingsRequested;
+    public event Action? SettingsWindowRequested;
 
     private readonly ContextMenuStrip _menu;
+    private readonly LayeredSurface _surface = new();
     private string _line = "";
     private Font _font = null!;
-    private Color _bg, _text;
+    private StripPalette _palette;
+    private SizeF _textSize;
+    private bool _shadow;
 
     public Size ContentSize { get; private set; }
 
@@ -33,9 +46,16 @@ public sealed class OverlayWindow : Form
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
         MinimumSize = new Size(1, 1);
-        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+        // The controller owns our geometry; PerMonitorV2 auto-scaling would fight SyncStrips
+        AutoScaleMode = AutoScaleMode.None;
+        // No double buffer: nothing is ever shown from the WM_PAINT back buffer
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
 
         _menu = new ContextMenuStrip();
+        _menu.Items.Add("Settings…", null, (_, _) => SettingsWindowRequested?.Invoke());
+        _menu.Items.Add(new ToolStripSeparator());
+        // Kept, and kept worded the same: the window deliberately does not expose pollIntervalMs,
+        // sensorIntervalMs or logging, and the docs point at this item for those.
         _menu.Items.Add("Open settings file", null, (_, _) => OpenSettingsRequested?.Invoke());
         _menu.Items.Add("Reload settings", null, (_, _) => ReloadRequested?.Invoke());
         _menu.Items.Add(new ToolStripSeparator());
@@ -51,7 +71,8 @@ public sealed class OverlayWindow : Form
         get
         {
             var cp = base.CreateParams;
-            cp.ExStyle |= NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOPMOST;
+            cp.ExStyle |= NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE
+                        | NativeMethods.WS_EX_TOPMOST | NativeMethods.WS_EX_LAYERED;
             return cp;
         }
     }
@@ -63,44 +84,94 @@ public sealed class OverlayWindow : Form
         base.OnHandleCreated(e);
         // UIPI blocks the TaskbarCreated broadcast from medium-IL explorer to this elevated process
         NativeMethods.ChangeWindowMessageFilterEx(Handle, TaskbarCreatedMsg, NativeMethods.MSGFLT_ALLOW, IntPtr.Zero);
-        int pref = 3; // DWMWCP_ROUNDSMALL — subtle pill look to match Win11
-        _ = DwmSetWindowAttribute(Handle, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, ref pref, sizeof(int));
+
+        // Rounding would trace a faint DWM frame line around an otherwise invisible window
+        int pref = NativeMethods.DWMWCP_DONOTROUND;
+        _ = NativeMethods.DwmSetWindowAttribute(Handle, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int));
+        int borderColor = unchecked((int)NativeMethods.DWMWA_COLOR_NONE);
+        _ = NativeMethods.DwmSetWindowAttribute(Handle, NativeMethods.DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
+
+        Render(); // define the surface before the window can be shown
     }
 
     public void ApplyAppearance(AppSettings settings)
     {
         _font?.Dispose();
         float px = settings.Appearance.FontSizePt * DeviceDpi / 72f;
+        // GraphicsUnit.Pixel is load-bearing: the render Graphics comes from a 96-DPI bitmap, so a
+        // Point-sized font would silently ignore DeviceDpi.
         Font? font = null;
         try { font = new Font(settings.Appearance.FontName, px, FontStyle.Regular, GraphicsUnit.Pixel); }
         catch { }
         if (font is null || !string.Equals(font.Name, settings.Appearance.FontName, StringComparison.OrdinalIgnoreCase))
-            font ??= new Font(FontFamily.GenericMonospace, px, FontStyle.Regular, GraphicsUnit.Pixel);
+        {
+            font?.Dispose();
+            font = new Font(FontFamily.GenericMonospace, px, FontStyle.Regular, GraphicsUnit.Pixel);
+        }
         _font = font;
 
-        (_bg, _text, _) = ThemeWatcher.Resolve(settings.Appearance);
-        BackColor = _bg;
+        _palette = ThemeWatcher.Resolve(settings.Appearance);
+        _shadow = settings.Appearance.TextShadow;
+
+        // Measure with the same engine and hints that Draw uses, or the text drifts inside the strip
+        _textSize = MeasureWidestSample(settings);
 
         int padX = Math.Max(6, 8 * DeviceDpi / 96);
-        var textSize = TextRenderer.MeasureText(LineComposer.WidestSample(settings), _font, Size.Empty,
-            TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
-        ContentSize = new Size(textSize.Width + 2 * padX, textSize.Height + Math.Max(4, 6 * DeviceDpi / 96));
-        Invalidate();
+        ContentSize = new Size(
+            (int)Math.Ceiling(_textSize.Width) + 2 * padX,
+            (int)Math.Ceiling(_textSize.Height) + Math.Max(4, 6 * DeviceDpi / 96));
+        Render();
+    }
+
+    private SizeF MeasureWidestSample(AppSettings settings)
+    {
+        string sample = LineComposer.WidestSample(settings);
+        if (_surface.Graphics is not null)
+            return StripRenderer.MeasureLine(_surface.Graphics, sample, _font);
+
+        // Before the surface exists (constructor path), measure on a throwaway 96-DPI surface
+        using var bmp = new Bitmap(1, 1);
+        using var g = Graphics.FromImage(bmp);
+        return StripRenderer.MeasureLine(g, sample, _font);
     }
 
     public void UpdateLine(string line)
     {
         if (line == _line) return;
         _line = line;
-        Invalidate();
+        Render();
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    /// <summary>
+    /// Sizes the layered surface to the live window rect — not ContentSize, which only constrains
+    /// the width (TaskbarLocator stretches the strip to the full taskbar height).
+    /// </summary>
+    private void Render()
     {
-        e.Graphics.Clear(_bg);
-        TextRenderer.DrawText(e.Graphics, _line, _font, ClientRectangle, _text,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
-            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+        if (!IsHandleCreated || _font is null) return;
+        var size = ClientSize;
+        if (size.Width <= 0 || size.Height <= 0) return;
+        if (!_surface.Resize(size.Width, size.Height)) return;
+
+        StripRenderer.Draw(_surface.Graphics!, _line, _font, size, _textSize, _palette, _shadow);
+        _surface.Commit(Handle);
+    }
+
+    // Painting goes through UpdateLayeredWindow; anything drawn here would be discarded.
+    protected override void OnPaint(PaintEventArgs e) { }
+
+    protected override void OnPaintBackground(PaintEventArgs e) { }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        Render();
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        if (Visible) Render();
     }
 
     protected override void WndProc(ref Message m)
@@ -114,9 +185,18 @@ public sealed class OverlayWindow : Form
         {
             ExplorerRestarted?.Invoke();
         }
+        else if (m.Msg == NativeMethods.WM_DWMCOLORIZATIONCOLORCHANGED)
+        {
+            AppearanceInvalidated?.Invoke();
+        }
         else if (m.Msg is NativeMethods.WM_DISPLAYCHANGE or NativeMethods.WM_SETTINGCHANGE)
         {
-            DisplayOrSettingsChanged?.Invoke();
+            // "ImmersiveColorSet" is the shell's accent/light-dark signal; it needs an immediate
+            // recolor, not the 2 s redock debounce the geometry path uses.
+            if (m.Msg == NativeMethods.WM_SETTINGCHANGE && IsImmersiveColorSet(m.LParam))
+                AppearanceInvalidated?.Invoke();
+            else
+                DisplayOrSettingsChanged?.Invoke();
         }
         else if (m.Msg == NativeMethods.WM_RBUTTONUP)
         {
@@ -132,9 +212,27 @@ public sealed class OverlayWindow : Form
         base.WndProc(ref m);
     }
 
+    private static bool IsImmersiveColorSet(IntPtr lParam)
+    {
+        if (lParam == IntPtr.Zero) return false;
+        try { return Marshal.PtrToStringUni(lParam) == "ImmersiveColorSet"; }
+        catch { return false; }
+    }
+
     protected override void OnDpiChangedAfterParent(EventArgs e)
     {
         base.OnDpiChangedAfterParent(e);
+        DisplayOrSettingsChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// The font is built manually in pixel units, so WinForms scaling won't resize it — a DPI change
+    /// has to rebuild it. (OnDpiChangedAfterParent never fires for a top-level form.)
+    /// </summary>
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        AppearanceInvalidated?.Invoke();
         DisplayOrSettingsChanged?.Invoke();
     }
 
@@ -144,10 +242,8 @@ public sealed class OverlayWindow : Form
         {
             _menu.Dispose();
             _font?.Dispose();
+            _surface.Dispose();
         }
         base.Dispose(disposing);
     }
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 }
