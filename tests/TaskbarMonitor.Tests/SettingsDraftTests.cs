@@ -23,10 +23,10 @@ public class SettingsDraftTests
         var draft = new SettingsDraft(source);
 
         draft.Current.Appearance.FontName = "Cascadia Mono";
-        draft.Current.Metrics.Gpu.Enabled = false;
+        draft.Current.Metrics.Cpu.Enabled = false;
 
         Assert.Equal("Consolas", draft.Snapshot.Appearance.FontName);
-        Assert.True(draft.Snapshot.Metrics.Gpu.Enabled);
+        Assert.True(draft.Snapshot.Metrics.Cpu.Enabled);
         Assert.Equal("Consolas", source.Appearance.FontName); // the caller's tree too
     }
 
@@ -37,7 +37,7 @@ public class SettingsDraftTests
         draft.Current.Appearance.FontName = "Arial";
         draft.Current.Appearance.BackgroundAlpha = 200;
         draft.Current.Positioning.RightMarginPx = 99;
-        draft.Current.Metrics.Ram.Enabled = false;
+        draft.Current.Metrics.Ram.Enabled = true;
         draft.Current.Behavior.HideOnFullscreen = false;
         draft.Current.Network.AdapterOverride = "Ethernet";
 
@@ -46,7 +46,8 @@ public class SettingsDraftTests
         Assert.Equal("Consolas", draft.Current.Appearance.FontName);
         Assert.Equal(0, draft.Current.Appearance.BackgroundAlpha);
         Assert.Equal(8, draft.Current.Positioning.RightMarginPx);
-        Assert.True(draft.Current.Metrics.Ram.Enabled);
+        Assert.False(draft.Current.Metrics.Ram.Enabled);   // RAM is off by default
+        Assert.True(draft.Current.Metrics.Cpu.Enabled);
         Assert.True(draft.Current.Behavior.HideOnFullscreen);
         Assert.Null(draft.Current.Network.AdapterOverride);
     }

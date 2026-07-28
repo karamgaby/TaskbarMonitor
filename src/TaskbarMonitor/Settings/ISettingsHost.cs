@@ -11,6 +11,14 @@ public interface ISettingsHost
 
     string SettingsPath { get; }
 
+    /// <summary>
+    /// True when the primary taskbar's TrayNotifyWnd was found, i.e. the normal path. False means
+    /// the primary strip is positioned off <c>trayReservePx</c> instead, which is the only situation
+    /// where that setting does anything — the window disables it otherwise rather than offering a
+    /// control that silently has no effect.
+    /// </summary>
+    bool PrimaryTrayLocated { get; }
+
     /// <summary>Apply to the live strips without touching disk. Takes its own copy.</summary>
     void ApplyLive(AppSettings settings);
 

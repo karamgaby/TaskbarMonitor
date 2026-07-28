@@ -22,10 +22,16 @@ public sealed class MetricsSettings
     public RamMetric Ram { get; set; } = new();
     public GpuMetric Gpu { get; set; } = new();
 
+    // Network + CPU only by default. All four metrics is 71 characters ≈ 640 px at the default
+    // 12 pt Consolas, which on a 1920-wide taskbar reaches back into the centred app buttons and
+    // draws over them (the strip is TOPMOST). Network + CPU is 43 chars ≈ 390 px, which clears them.
+    // It also avoids advertising two failure states on first run: GPU never auto-hides, so on any
+    // non-NVIDIA machine an enabled-by-default GPU field reads "GPU  --%  --°C" forever.
+    // RAM and GPU are one checkbox away in the settings window.
     public sealed class NetworkMetric { public bool Enabled { get; set; } = true; public bool ShowUpload { get; set; } = true; }
     public sealed class CpuMetric { public bool Enabled { get; set; } = true; public bool ShowTemp { get; set; } = true; }
-    public sealed class RamMetric { public bool Enabled { get; set; } = true; }
-    public sealed class GpuMetric { public bool Enabled { get; set; } = true; public bool ShowTemp { get; set; } = true; }
+    public sealed class RamMetric { public bool Enabled { get; set; } = false; }
+    public sealed class GpuMetric { public bool Enabled { get; set; } = false; public bool ShowTemp { get; set; } = true; }
 }
 
 public sealed class PositioningSettings
@@ -43,9 +49,10 @@ public sealed class AppearanceSettings
     public float FontSizePt { get; set; } = 12.0f;
     public string Theme { get; set; } = "auto";           // auto | dark | light
     public string TextColorSource { get; set; } = "accent"; // accent | theme
-    public int BackgroundAlpha { get; set; } = 0;         // 0-255; 0 = fully transparent
+    public int BackgroundAlpha { get; set; } = 0;         // 0-255; 0 = fully transparent. Always the
+                                                          // opacity, including when an override is set
     public bool TextShadow { get; set; } = true;          // 1px shadow keeps text legible over the taskbar
-    public string? BackgroundOverride { get; set; }       // "#RRGGBB" or "#AARRGGBB"
+    public string? BackgroundOverride { get; set; }       // "#RRGGBB" — colour only; alpha is BackgroundAlpha
     public string? TextOverride { get; set; }             // wins over the accent color
 }
 

@@ -251,6 +251,15 @@ public sealed class PositionController : ApplicationContext, ISettingsHost
 
     public string SettingsPath => _settingsPath;
 
+    public bool PrimaryTrayLocated
+    {
+        get
+        {
+            try { return TaskbarLocator.LocateAll(multiMonitor: false).Any(b => b.NotifyBounds is not null); }
+            catch (Exception ex) { Log.Warn($"Tray probe failed: {ex.Message}"); return true; }
+        }
+    }
+
     /// <summary>
     /// Applies settings to the running app without touching disk — the settings window's live
     /// preview. Takes its own deep copy, because the window keeps mutating its draft afterwards and
@@ -260,8 +269,16 @@ public sealed class PositionController : ApplicationContext, ISettingsHost
     {
         _settings = SettingsStore.Clone(settings);
         _engine.ApplySettings(_settings);
-        _uiTimer.Interval = Math.Max(250, _settings.PollIntervalMs);
-        _watchdog.Interval = Math.Max(1000, _settings.Behavior.WatchdogIntervalMs);
+
+        // Assign only on a real change. Timer.Interval is KillTimer+SetTimer even when the value is
+        // identical, so an unconditional write restarted both timers on every preview — with the
+        // settings window's throttle applying on the leading edge of a drag, that would reset the
+        // 2 s watchdog every 100 ms and it would never tick for the length of the drag.
+        int uiInterval = Math.Max(250, _settings.PollIntervalMs);
+        if (_uiTimer.Interval != uiInterval) _uiTimer.Interval = uiInterval;
+
+        int watchdogInterval = Math.Max(1000, _settings.Behavior.WatchdogIntervalMs);
+        if (_watchdog.Interval != watchdogInterval) _watchdog.Interval = watchdogInterval;
 
         // Geometry and text have to change together: ApplyAppearance recomputes ContentSize and
         // SyncStrips resizes to it immediately, so without this the old line renders at the new
@@ -379,6 +396,21 @@ public sealed class PositionController : ApplicationContext, ISettingsHost
 
     private void ExitApp()
     {
+        // One unconfirmed click otherwise ends the app until next sign-in, and getting it back means
+        // knowing a scheduled task exists — knowledge that only lives in docs\INSTALL.md. The item
+        // also sits directly under a disabled one, which is exactly where a mis-click lands.
+        //
+        // Owned by a throwaway TopMost form: the only windows this process has are the strips, which
+        // are WS_EX_NOACTIVATE, so an ownerless modal can come up behind the taskbar — invisible and
+        // blocking the UI thread, which would read as a hang rather than a prompt.
+        using var anchor = new Form { TopMost = true, ShowInTaskbar = false, Size = new Size(1, 1), StartPosition = FormStartPosition.CenterScreen };
+        if (MessageBox.Show(anchor,
+                "Stop TaskbarMonitor until you next sign in?\n\n" +
+                "To start it again sooner, run the \"TaskbarMonitor\" task in Task Scheduler.",
+                "TaskbarMonitor", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
         Log.Info("Exit requested");
         // Close first: the window's preview debounce would otherwise tick into a controller that is
         // already tearing down, and Application.Run should not be left with an open form.

@@ -17,7 +17,12 @@ public class SettingsStoreTests : IDisposable
         var s = SettingsStore.Load(SettingsPath);
         Assert.True(File.Exists(SettingsPath));
         Assert.Equal(1000, s.PollIntervalMs);
-        Assert.True(s.Metrics.Gpu.Enabled);
+        // Network + CPU only: the four-metric line is ~640 px at the default font and overlaps the
+        // centred taskbar buttons on a 1920-wide bar. RAM and GPU are opt-in.
+        Assert.True(s.Metrics.Network.Enabled);
+        Assert.True(s.Metrics.Cpu.Enabled);
+        Assert.False(s.Metrics.Ram.Enabled);
+        Assert.False(s.Metrics.Gpu.Enabled);
     }
 
     [Fact]

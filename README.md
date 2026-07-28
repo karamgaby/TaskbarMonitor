@@ -3,12 +3,19 @@
 A system-monitor strip that docks into the Windows 11 taskbar, just left of the tray:
 
 ```
-↓ 1.2 MB/s ↑ 88 KB/s │ CPU 14% 46°C │ RAM 38% │ GPU 12% 51°C
+↓   1.2 MB/s  ↑  88.0 KB/s │ CPU  14%  46°C
 ```
 
 It has no background of its own. The text is drawn directly onto the taskbar's acrylic in your
 Windows accent color, so it reads as part of the taskbar rather than as a window sitting on it.
 One strip is docked per taskbar, so multi-monitor setups get one on each.
+
+Every field is fixed-width, so the numbers never make the strip jitter as they change — that is
+where the padding above comes from. Network and CPU are on by default; RAM and GPU are one
+checkbox away in Settings. The default set is deliberately narrow, because all four fields is
+about 640 px and reaches back into the centred taskbar buttons on a 1920-wide screen.
+
+**Right-click the strip** for the menu.
 
 ## Install
 
@@ -42,18 +49,20 @@ WSL2 and Docker `vEthernet` adapters are excluded rather than double-counted.
 ## Configuration
 
 Right-click the strip → **Settings…** for a settings window with live preview: every change shows
-on the strip as you make it, **Save** writes the file, and **Cancel** reverts. The knobs most
-people want are there — `theme` (`auto`/`light`/`dark`), `textColorSource` (`accent` or `theme`),
-`backgroundAlpha` (`0` is fully transparent; raise it for a translucent pill) and `textShadow`.
+on the strip as you make it, **Save** writes the file and leaves the window open, and **Close**
+discards anything unsaved (it asks first). The title shows `*` while there are unsaved changes. The
+knobs most people want are there — which metrics to show, `theme` (`auto`/`light`/`dark`),
+`textColorSource` (`accent` or `theme`), `backgroundAlpha` (`0` is fully transparent; raise it for
+a translucent pill) and `textShadow`.
 
 `publish\settings.json` sits next to the exe, is created with defaults on first run, and
-hot-reloads when saved, so hand-editing still works. *Open settings file* opens it in Notepad —
-it is also the only way to reach `pollIntervalMs`, `sensorIntervalMs` and `logging`, which the
-window deliberately does not expose. Full table in
+hot-reloads when saved, so hand-editing still works. *Advanced → Open settings file* opens it in
+Notepad — it is also the only way to reach `pollIntervalMs`, `sensorIntervalMs` and `logging`,
+which the window deliberately does not expose. Full table in
 [docs/INSTALL.md § Configuration](docs/INSTALL.md#configuration).
 
-The right-click menu also offers *Reload settings* and *Exit*. Left-clicks are swallowed so
-the strip never steals focus from the taskbar.
+Left-clicks are swallowed so the strip never steals focus from the taskbar; the menu is
+right-click only.
 
 ## Building from source
 
