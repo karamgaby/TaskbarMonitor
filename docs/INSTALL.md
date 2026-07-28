@@ -75,8 +75,8 @@ The strip should appear on each taskbar, just left of the tray:
 ```
 
 It has no background of its own — the text is drawn straight onto the taskbar's acrylic, in your
-Windows accent color. **Right-click the strip** for the menu (open settings file, reload settings,
-exit). If the menu does not open, see [Troubleshooting](#troubleshooting).
+Windows accent color. **Right-click the strip** for the menu (settings, open settings file, reload
+settings, exit). If the menu does not open, see [Troubleshooting](#troubleshooting).
 
 To check from a shell:
 
@@ -117,9 +117,31 @@ This stops the process and unregisters the task. Delete the `publish` folder to 
 
 Settings live in `publish\settings.json`, next to the exe. The file is created with defaults on
 first run and **hot-reloads** — save it and the strip re-renders within about a second (500 ms
-debounce). Right-click the strip → *Open settings file* opens it in Notepad.
+debounce).
 
-Appearance keys, since these are the ones most people want:
+### The settings window
+
+Right-click the strip → **Settings…**. Every field is a normal control, and **every change previews
+live on the strip immediately** — nothing is written to `settings.json` until you press **Save**.
+**Cancel**, `Esc` and the X button all revert the strip to how it looked when the window opened.
+*Reset to defaults* restores the groups the window shows, but does not save on its own.
+
+A few things worth knowing:
+
+- **`pollIntervalMs`, `sensorIntervalMs` and the whole `logging` section are file-only** — the
+  window does not show them, and *Reset to defaults* leaves them untouched. Use *Open settings file*
+  for those. (`logging` in particular only takes effect at startup.)
+- **External edits are ignored while the window is open**, since its draft is already live on the
+  strip. Close it, or use *Reload settings*, to pick them up. If the file changed behind its back,
+  Save asks before overwriting.
+- **Saving normalizes.** Values outside the window's ranges are clamped, and an unrecognised `theme`
+  or `textColorSource` becomes `auto` / `accent` — which is already how the renderer treated them.
+
+`settings.json` stays authoritative, and hand-editing still works exactly as before.
+
+### Appearance keys
+
+These are the ones most people want; all of them are in the window's *Appearance* group.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -159,6 +181,11 @@ unelevated; start it through the scheduled task instead.
 windows are click-through wherever the alpha is exactly zero. It is washed at alpha 1 to stay
 hit-testable, so this should not happen — if it does, set `backgroundAlpha` to a visible value to
 confirm where the strip actually is, and file it as a bug.
+
+**I hand-edited `settings.json` and nothing happened.** The settings window was open — external
+changes are deliberately ignored while it is, so it cannot be clobbered mid-edit. `monitor.log`
+records this as `settings.json changed on disk; ignored while the settings window is open`. Close
+the window and save again, or use *Reload settings*.
 
 **The strip vanished after restarting explorer.** It should redock automatically within ~2 s.
 If it does not, check `monitor.log` for `TaskbarCreated received`; if that line is missing, the

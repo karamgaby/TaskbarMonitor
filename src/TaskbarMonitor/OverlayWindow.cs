@@ -28,6 +28,7 @@ public sealed class OverlayWindow : Form
     public event Action? ExitRequested;
     public event Action? ReloadRequested;
     public event Action? OpenSettingsRequested;
+    public event Action? SettingsWindowRequested;
 
     private readonly ContextMenuStrip _menu;
     private readonly LayeredSurface _surface = new();
@@ -51,6 +52,10 @@ public sealed class OverlayWindow : Form
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
 
         _menu = new ContextMenuStrip();
+        _menu.Items.Add("Settings…", null, (_, _) => SettingsWindowRequested?.Invoke());
+        _menu.Items.Add(new ToolStripSeparator());
+        // Kept, and kept worded the same: the window deliberately does not expose pollIntervalMs,
+        // sensorIntervalMs or logging, and the docs point at this item for those.
         _menu.Items.Add("Open settings file", null, (_, _) => OpenSettingsRequested?.Invoke());
         _menu.Items.Add("Reload settings", null, (_, _) => ReloadRequested?.Invoke());
         _menu.Items.Add(new ToolStripSeparator());

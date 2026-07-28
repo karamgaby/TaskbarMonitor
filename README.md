@@ -41,15 +41,18 @@ WSL2 and Docker `vEthernet` adapters are excluded rather than double-counted.
 
 ## Configuration
 
-`publish\settings.json` sits next to the exe, is created with defaults on first run, and
-hot-reloads when saved. Right-click the strip → *Open settings file*.
+Right-click the strip → **Settings…** for a settings window with live preview: every change shows
+on the strip as you make it, **Save** writes the file, and **Cancel** reverts. The knobs most
+people want are there — `theme` (`auto`/`light`/`dark`), `textColorSource` (`accent` or `theme`),
+`backgroundAlpha` (`0` is fully transparent; raise it for a translucent pill) and `textShadow`.
 
-The appearance knobs most people want are `theme` (`auto`/`light`/`dark`), `textColorSource`
-(`accent` or `theme`), `backgroundAlpha` (`0` is fully transparent; raise it for a translucent
-pill) and `textShadow`. Full table in
+`publish\settings.json` sits next to the exe, is created with defaults on first run, and
+hot-reloads when saved, so hand-editing still works. *Open settings file* opens it in Notepad —
+it is also the only way to reach `pollIntervalMs`, `sensorIntervalMs` and `logging`, which the
+window deliberately does not expose. Full table in
 [docs/INSTALL.md § Configuration](docs/INSTALL.md#configuration).
 
-Right-clicking the strip also offers *Reload settings* and *Exit*. Left-clicks are swallowed so
+The right-click menu also offers *Reload settings* and *Exit*. Left-clicks are swallowed so
 the strip never steals focus from the taskbar.
 
 ## Building from source
@@ -75,6 +78,8 @@ bypasses the interface counters the app reads.
 | `src\TaskbarMonitor\Sensors\` | Sampling threads; `Sensors\Network\` is the accuracy-critical part |
 | `src\TaskbarMonitor\Rendering\` | Layered-window surface, text rendering, accent/theme colors |
 | `src\TaskbarMonitor\Formatting\` | Fixed-width formatters, so the strip never changes width |
+| `src\TaskbarMonitor\Settings\` | The settings model, its JSON store, and the editing/validation rules |
+| `src\TaskbarMonitor\UI\` | The settings window |
 | `deploy\` | Scheduled-task install/uninstall scripts |
 | `tests\` | xunit tests |
 
