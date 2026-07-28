@@ -28,6 +28,10 @@ dotnet publish src\TaskbarMonitor -c Release -r win-x64 --self-contained -p:Publ
 This produces `publish\TaskbarMonitor.exe`. Do not add `-p:PublishTrimmed=true` —
 LibreHardwareMonitor resolves sensors by reflection and trimming breaks it.
 
+> If TaskbarMonitor is already installed and running, **stop it first** or the publish fails with
+> `GenerateBundle ... The process cannot access the file` — the running exe is locked. See
+> [Updating to a new build](#updating-to-a-new-build).
+
 If `dotnet` is not on PATH in a fresh shell:
 
 ```powershell
@@ -136,6 +140,15 @@ A corrupt `settings.json` is not overwritten — the app logs a warning and runs
 file is safe to hand-edit.
 
 ## Troubleshooting
+
+**`dotnet publish` fails with `GenerateBundle` / `The process cannot access the file`.** A running
+TaskbarMonitor holds a lock on `publish\TaskbarMonitor.exe`. Stop it and republish:
+
+```powershell
+Stop-Process -Name TaskbarMonitor -Force
+dotnet publish src\TaskbarMonitor -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+Start-ScheduledTask -TaskName TaskbarMonitor
+```
 
 **CPU temperature shows `--°C`.** Either PawnIO is not installed, or the app is running
 unelevated. Check `monitor.log` — the startup line reports both:

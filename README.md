@@ -21,6 +21,8 @@ dotnet publish src\TaskbarMonitor -c Release -r win-x64 --self-contained -p:Publ
 ```
 
 That publishes a self-contained binary and registers a scheduled task that starts it at logon.
+If it is already running, `Stop-Process -Name TaskbarMonitor -Force` first — the running exe is
+locked and the publish will otherwise fail.
 CPU temperature additionally needs the [PawnIO](https://pawnio.eu/) driver; without it that one
 field shows `--°C` and everything else works.
 
