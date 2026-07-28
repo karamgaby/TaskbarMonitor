@@ -1,5 +1,8 @@
 # TaskbarMonitor
 
+User-facing docs: [README.md](README.md) and [docs/INSTALL.md](docs/INSTALL.md) (install, config
+reference, troubleshooting). Keep them in sync when settings keys or the deploy flow change.
+
 Windows 11 taskbar system-monitor strip: `↓ rate ↑ rate │ CPU % °C │ RAM % │ GPU % °C`, one borderless always-on-top window docked left of the tray on each taskbar. C#/.NET 8 WinForms, single package dependency (LibreHardwareMonitorLib, pinned `[0.9.6]`).
 
 ## Build / test / publish
