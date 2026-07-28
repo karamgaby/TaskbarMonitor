@@ -25,8 +25,17 @@ public sealed class PositionController : ApplicationContext
     private readonly System.Windows.Forms.Timer _reloadDebounce = new();
     private readonly FileSystemWatcher? _settingsWatcher;
 
+    /// <summary>
+    /// Handle-bearing control created on the UI thread, used to marshal FileSystemWatcher and
+    /// SystemEvents callbacks. Both fire on background threads, and a System.Windows.Forms.Timer
+    /// started from one never ticks — its WM_TIMER has no message loop to be pumped on.
+    /// </summary>
+    private readonly Control _sync = new();
+
     public PositionController(AppSettings settings, SensorEngine engine, string settingsPath)
     {
+        _sync.CreateControl();
+        _ = _sync.Handle; // force handle creation now, on the UI thread
         _settings = settings;
         _engine = engine;
         _settingsPath = settingsPath;
@@ -50,6 +59,7 @@ public sealed class PositionController : ApplicationContext
             _settingsWatcher = new FileSystemWatcher(dir, Path.GetFileName(settingsPath))
             {
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
+                SynchronizingObject = _sync,   // without this the debounce timer never ticks
                 EnableRaisingEvents = true,
             };
             _settingsWatcher.Changed += (_, _) => { _reloadDebounce.Stop(); _reloadDebounce.Start(); };
@@ -80,7 +90,25 @@ public sealed class PositionController : ApplicationContext
 
     private void OnUserPreferenceChanged(object? s, UserPreferenceChangedEventArgs e)
     {
-        foreach (var strip in _strips.Values) strip.ApplyAppearance(_settings);
+        if (e.Category is not (UserPreferenceCategory.Color or UserPreferenceCategory.General
+            or UserPreferenceCategory.VisualStyle or UserPreferenceCategory.Window)) return;
+        ReapplyAppearance();
+    }
+
+    /// <summary>
+    /// SystemEvents raises on its own thread, so this must marshal: the strips' GDI surfaces have
+    /// thread affinity and the 1 s timer is already rendering them on the UI thread.
+    /// </summary>
+    private void ReapplyAppearance()
+    {
+        if (_sync.InvokeRequired)
+        {
+            try { _sync.BeginInvoke(ReapplyAppearance); }
+            catch (Exception ex) { Log.Warn($"Appearance marshal failed: {ex.Message}"); }
+            return;
+        }
+
+        foreach (var s in _strips.Values) s.ApplyAppearance(_settings);
         SyncStrips();
     }
 
@@ -116,7 +144,9 @@ public sealed class PositionController : ApplicationContext
                 }
 
                 var target = TaskbarLocator.ComputeStripRect(bar, strip.ContentSize, _settings.Positioning);
-                if (!strip.IsHandleCreated) strip.Show();
+                // Seed the bounds before the handle exists, or the strip is briefly shown at the
+                // default 300x300 near the origin — an invisible hit-trap now that it has no panel.
+                if (!strip.IsHandleCreated) { strip.Bounds = target; strip.Show(); }
 
                 // Re-assert top-of-topmost every tick: the taskbar is TOPMOST too and can raise
                 // itself above us within the band without touching our exstyle bit.
@@ -181,6 +211,7 @@ public sealed class PositionController : ApplicationContext
             _redockDelay.Start();
         };
         strip.DisplayOrSettingsChanged += () => { _redockDelay.Stop(); _redockDelay.Start(); };
+        strip.AppearanceInvalidated += ReapplyAppearance;
         strip.ExitRequested += ExitApp;
         strip.ReloadRequested += ReloadSettings;
         strip.OpenSettingsRequested += () =>
@@ -227,6 +258,7 @@ public sealed class PositionController : ApplicationContext
             _settingsWatcher?.Dispose();
             foreach (var strip in _strips.Values) strip.Dispose();
             _strips.Clear();
+            _sync.Dispose();
         }
         base.Dispose(disposing);
     }
