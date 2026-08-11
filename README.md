@@ -1,5 +1,8 @@
 # TaskbarMonitor
 
+[![CI](https://github.com/karamgaby/TaskbarMonitor/actions/workflows/ci.yml/badge.svg)](https://github.com/karamgaby/TaskbarMonitor/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A system-monitor strip that docks into the Windows 11 taskbar, just left of the tray:
 
 ```
