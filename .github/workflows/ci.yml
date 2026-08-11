@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore TaskbarMonitor.sln
+
+      - name: Build
+        run: dotnet build TaskbarMonitor.sln --configuration Release --no-restore
+
+      # Trimming is never enabled here on purpose: LibreHardwareMonitor
+      # resolves sensors by reflection and a trimmed build loses them.
+      - name: Test
+        run: dotnet test TaskbarMonitor.sln --configuration Release --no-build --verbosity normal
